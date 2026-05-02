@@ -1,0 +1,198 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Smart Ration Shop</title>
+  <link rel="stylesheet" href="assets/style.css">
+</head>
+<body>
+  <header>
+    <h1>RationX : Digital public Distribution System</h1>
+    <p>Digital tokens, queue management, sales & inventory — simple and transparent.</p>
+  </header>
+
+  <main class="container">
+    <section class="card" id="role-select">
+      <h2>Welcome</h2>
+      <p>Select your role to continue</p>
+      <div class="form-row">
+        <button id="btn-show-customer">I'm a Customer</button>
+        <button id="btn-show-shop">I'm a Shopkeeper</button>
+      </div>
+    </section>
+
+    <!-- Customer area: choose register or login (hidden initially) -->
+    <section class="card hidden" id="customer-section">
+      <h2>Customer</h2>
+      <div class="form-row" id="cust-auth-controls">
+        <button id="btn-cust-show-register">Register</button>
+        <button id="btn-cust-show-login">Login</button>
+        <button id="btn-back-customer" class="hidden">Back</button>
+        <button id="btn-cust-logout" class="hidden">Logout</button>
+      </div>
+
+      <div id="customer-register" class="hidden">
+        <h4>Register</h4>
+        <div class="form-row">
+          <label for="rc-number">Ration Card Number</label>
+          <input id="rc-number" placeholder="Enter ration card number" />
+        </div>
+        <div class="form-row">
+          <label for="cust-name">Name</label>
+          <input id="cust-name" placeholder="Full name" />
+        </div>
+        <div class="form-row">
+          <label for="mobile">Mobile Number</label>
+          <input id="mobile" placeholder="Enter mobile (10 digits)" />
+        </div>
+        <div class="form-row">
+          <label for="cust-pass">Password</label>
+          <input id="cust-pass" type="password" placeholder="Choose a password" />
+        </div>
+        <div class="form-row">
+          <button id="btn-register">Create Account</button>
+        </div>
+      </div>
+
+      <div id="customer-login" class="hidden">
+        <h4>Login</h4>
+        <div class="form-row">
+          <label for="login-rc">Ration Card</label>
+          <input id="login-rc" placeholder="Enter ration card" />
+        </div>
+        <div class="form-row">
+          <label for="login-pass">Password</label>
+          <input id="login-pass" type="password" placeholder="Password" />
+        </div>
+          <div class="form-row">
+            <button id="btn-login-cust">Login & Request Token</button>
+          </div>
+
+        <div id="customer-token" class="info-box hidden">
+          <h3>Your Token</h3>
+          <p id="token-number">#T-001</p>
+          <p id="token-name">Name: -</p>
+          <p id="token-time">Estimated pickup: 10:00 AM</p>
+        </div>
+        <div id="customer-dashboard" class="info-box hidden">
+          <h4>Distribution Dates</h4>
+          <p id="dist-dates">Start: -  End: -</p>
+          <h4>Stock</h4>
+          <div id="cust-stock-list"></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Shop section (hidden initially) -->
+    <section class="card hidden" id="shop-section">
+      <h2>Shopkeeper (Admin)</h2>
+      <div class="form-row" id="shop-auth-controls">
+        <button id="btn-shop-show-register">Register</button>
+        <button id="btn-shop-show-login">Login</button>
+        <button id="btn-back-shop" class="hidden">Back</button>
+        <button id="btn-shop-logout" class="hidden">Logout</button>
+      </div>
+
+      <div id="shop-register" class="hidden">
+        <h4>Register Shop</h4>
+        <div class="form-row">
+          <label for="shop-id">Shop ID</label>
+          <input id="shop-id" placeholder="Government-provided Shop ID" />
+        </div>
+        <div class="form-row">
+          <label for="gov-id">Govt License/Ref</label>
+          <input id="gov-id" placeholder="Govt reference / license" />
+        </div>
+        <div class="form-row">
+          <label for="shop-name">Shop Name</label>
+          <input id="shop-name" placeholder="Shop name" />
+        </div>
+        <div class="form-row">
+          <label for="shop-contact">Contact</label>
+          <input id="shop-contact" placeholder="Contact number" />
+        </div>
+        <div class="form-row">
+          <label for="shop-pass">Password</label>
+          <input id="shop-pass" type="password" placeholder="Choose admin password" />
+        </div>
+        <div class="form-row">
+          <button id="btn-register-shop">Register Shop</button>
+        </div>
+      </div>
+
+      <div id="shop-login" class="hidden">
+        <h4>Shopkeeper Login</h4>
+        <div class="form-row">
+          <label for="login-shopid">Shop ID</label>
+          <input id="login-shopid" placeholder="Shop ID" />
+        </div>
+        <div class="form-row">
+          <label for="login-shop-pass">Password</label>
+          <input id="login-shop-pass" type="password" placeholder="Password" />
+        </div>
+        <div class="form-row">
+          <button id="btn-login-shop">Login</button>
+        </div>
+      </div>
+
+      <div id="admin-panel" class="hidden">
+        <h3>Queue</h3>
+        <div class="queue-controls">
+          <button id="btn-next">Call Next</button>
+          <button id="btn-reset">Reset Queue</button>
+          <button id="btn-update-stock-now">Update Stock Now</button>
+        </div>
+        <ul id="queue-list" class="list"></ul>
+
+        <h3>Inventory</h3>
+        <div id="inventory-list" class="list"></div>
+        <div class="info-box">
+          <h4>Edit Inventory</h4>
+          <div id="inventory-edit"></div>
+          <div class="form-row"><button id="btn-save-inventory">Save Inventory</button></div>
+        </div>
+        <div class="info-box">
+          <h4>Distribution Dates (Set)</h4>
+          <div class="form-row"><label for="dist-start">Start</label><input id="dist-start" type="date" /></div>
+          <div class="form-row"><label for="dist-end">End</label><input id="dist-end" type="date" /></div>
+          <div class="form-row"><button id="btn-set-dates">Set Dates</button></div>
+        </div>
+        <div class="info-box" id="stock-last-updated"></div>
+
+        <h3>Sales</h3>
+        <div class="form-row">
+          <label for="sell-rc">Ration Card</label>
+          <input id="sell-rc" placeholder="Enter ration card of buyer" />
+        </div>
+        <div class="form-row">
+          <label for="sell-item">Item</label>
+          <select id="sell-item"></select>
+        </div>
+        <div class="form-row">
+          <label for="sell-qty">Quantity</label>
+          <input id="sell-qty" type="number" min="1" value="1" />
+        </div>
+        <div class="form-row">
+          <button id="btn-sell">Record Sale</button>
+        </div>
+
+        <h3>Sales Log</h3>
+        <ul id="sales-log" class="list"></ul>
+      </div>
+    </section>
+
+    <section class="card">
+      <h2>Public Dashboard</h2>
+      <div id="stock-status" class="info-box"></div>
+      <div id="upcoming-tokens" class="info-box"></div>
+    </section>
+  </main>
+
+  <footer>
+    <small>Built for a mini project — uses browser storage. For demo only.</small>
+  </footer>
+
+  <script src="assets/app.js"></script>
+</body>
+</html>
