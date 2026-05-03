@@ -8,9 +8,9 @@
   // default data
   const defaultState = {
     inventory: [
-      {id:'rice', name:'Rice (kg)', stock:100, uom:'pack'},
-      {id:'wheat', name:'Wheat (kg)', stock:80, uom:'pack'},
-      {id:'sugar', name:'Sugar (kg)', stock:50, uom:'pack'}
+      {id:'rice', name:'Rice (80kg)', stock:100, uom:'pack'},
+      {id:'wheat', name:'Wheat (5kg)', stock:80, uom:'pack'},
+      {id:'sugar', name:'Sugar (1kg)', stock:50, uom:'pack'}
     ],
     queue: [],
     nextToken: 1,
@@ -20,12 +20,29 @@
   const defaultUsers = { customers: [], shops: [] }
 
   let state = storage.get('ration_state', defaultState);
+  state.announcements = state.announcements || [];
   let users = storage.get('ration_users', defaultUsers);
 
   // helpers
   function formatToken(n){ return `T-${String(n).padStart(3,'0')}` }
   function nowPlusMinutes(min){ const d=new Date(); d.setMinutes(d.getMinutes()+min); return d }
   function formatTime(d){ return d.toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'}) }
+
+  // map inventory items to display labels for public/admin stock views
+  function bagDisplayName(item){
+    if(!item) return '';
+    if(item.id === 'rice') return 'Rice (80 kg bags)';
+    if(item.id === 'wheat') return 'Wheat (50 kg bags)';
+    if(item.id === 'sugar') return 'Sugar (30 kg bags)';
+    return item.name;
+  }
+
+  // thresholds for warnings (low vs urgent)
+  const stockThresholds = {
+    rice: { low: 3, urgent: 2 },
+    wheat: { low: 2, urgent: 1 },
+    sugar: { low: 1, urgent: 0 }
+  };
 
   // DOM refs
   // Customer
@@ -64,10 +81,15 @@
 
   // Sales
   const sellRC = document.getElementById('sell-rc');
-  const sellItem = document.getElementById('sell-item');
-  const sellQty = document.getElementById('sell-qty');
   const btnSell = document.getElementById('btn-sell');
+  const salesItemsContainer = document.getElementById('sales-items');
+  const btnAddSaleItem = document.getElementById('btn-add-sale-item');
+  // We'll render select+qty rows inside salesItemsContainer
   const salesLog = document.getElementById('sales-log');
+  const announceText = document.getElementById('announce-text');
+  const announceType = document.getElementById('announce-type');
+  const btnPostAnnouncement = document.getElementById('btn-post-announcement');
+  const announcementsList = document.getElementById('announcements-list');
 
   // Public
   const stockStatus = document.getElementById('stock-status');
@@ -214,7 +236,13 @@
     inventoryEdit.innerHTML = '';
     state.inventory.forEach(item=>{
       const row = document.createElement('div'); row.style.display='flex'; row.style.gap='8px'; row.style.alignItems='center'; row.style.marginBottom='6px';
-      const name = document.createElement('div'); name.style.minWidth='160px'; name.textContent = item.name;
+      const name = document.createElement('div'); name.style.minWidth='160px';
+      // show bag-size labels in the inventory edit module per user request
+      const displayName = (item.id === 'rice') ? 'Rice (80 kg bags)'
+                        : (item.id === 'wheat') ? 'Wheat (50 kg bags)'
+                        : (item.id === 'sugar') ? 'Sugar (30 kg bags)'
+                        : item.name;
+      name.textContent = displayName;
       const input = document.createElement('input'); input.type='number'; input.value = item.stock; input.min=0; input.dataset.itemId = item.id; input.style.width='80px';
       row.appendChild(name); row.appendChild(input);
       inventoryEdit.appendChild(row);
@@ -231,6 +259,69 @@
     save();
     alert('Inventory updated');
   })
+  // Sales cart helpers
+  function salesDisplayName(item){
+    if(!item) return '';
+    if(item.id === 'rice') return 'Rice (6kg)';
+    return item.name;
+  }
+  function createSaleRow(itemId, qty){
+    const row = document.createElement('div'); row.className='sale-row form-row';
+    const select = document.createElement('select'); select.className='sale-item-select';
+    state.inventory.forEach(it=>{ const opt = document.createElement('option'); opt.value = it.id; const display = (it.id === 'rice') ? 'Rice (6kg)' : ((it.id==='wheat' || it.id==='sugar') ? it.name : `${it.name} (${it.stock})`); opt.textContent = display; if(it.id===itemId) opt.selected=true; select.appendChild(opt); })
+    const inputQty = document.createElement('input'); inputQty.type='number'; inputQty.min=1; inputQty.value = qty||1; inputQty.className='sale-item-qty'; inputQty.style.width='80px';
+    const btnRem = document.createElement('button'); btnRem.textContent='Remove'; btnRem.type='button'; btnRem.addEventListener('click', ()=>{ row.remove(); });
+    row.appendChild(select); row.appendChild(inputQty); row.appendChild(btnRem);
+    return row;
+  }
+
+  btnAddSaleItem && btnAddSaleItem.addEventListener('click', ()=>{ const r = createSaleRow(); salesItemsContainer.appendChild(r); })
+
+  // keep sale-item selects in sync with inventory stock numbers
+  function refreshSaleSelectOptions(){
+    const selects = document.querySelectorAll('.sale-item-select');
+    selects.forEach(sel=>{
+      const current = sel.value;
+      sel.innerHTML = '';
+          state.inventory.forEach(it=>{ const opt = document.createElement('option'); opt.value = it.id; const display = (it.id === 'rice') ? 'Rice (6kg)' : ((it.id==='wheat' || it.id==='sugar') ? it.name : `${it.name} (${it.stock})`); opt.textContent = display;
+        if(it.id === current) opt.selected = true;
+        sel.appendChild(opt);
+      })
+    })
+  }
+
+  // Record sale: gather rows, validate, update inventory and sales array
+  btnSell.addEventListener('click', ()=>{
+    const rc = (sellRC.value||'').trim();
+    if(!rc){ alert('Enter ration card for sale'); return }
+    if(!state.currentShop){ alert('Shopkeeper must be logged in to record sales'); return }
+    const rows = salesItemsContainer.querySelectorAll('.sale-row');
+    if(rows.length===0){ alert('Add at least one item to sell'); return }
+    const saleItems = [];
+    for(const row of rows){
+      const sel = row.querySelector('.sale-item-select');
+      const qin = row.querySelector('.sale-item-qty');
+      if(!sel || !qin) continue;
+      const id = sel.value; const qty = Number(qin.value) || 0;
+      if(qty<=0){ alert('Quantity must be > 0'); return }
+      const it = state.inventory.find(i=>i.id===id);
+      if(!it){ alert('Invalid item selected'); return }
+      if(it.stock < qty){ alert(`Not enough stock for ${it.name}. Available ${it.stock}`); return }
+      // record sale item with sales-specific display name (e.g. Rice (6kg))
+      saleItems.push({ itemId:id, qty, name: salesDisplayName(it) });
+    }
+
+    // Everything validated — apply changes
+    saleItems.forEach(si=>{ const it = state.inventory.find(i=>i.id===si.itemId); if(it) it.stock -= si.qty; })
+    // include customer name if available
+    const customer = users.customers.find(c=>c.rc===rc);
+    const saleRecord = { id: state.sales.length+1, rc, customerName: customer ? customer.name : null, items: saleItems, at: Date.now(), shop: state.currentShop };
+    state.sales.push(saleRecord);
+    // clear sales items UI
+    salesItemsContainer.innerHTML=''; sellRC.value='';
+    save();
+    alert('Sale recorded');
+  })
 
   // queue functions
   function renderQueue(){ queueList.innerHTML=''; state.queue.forEach(q=>{ const li = document.createElement('li'); li.textContent = `${formatToken(q.token)} — RC:${q.rc} — ${q.called? 'CALLED':'Waiting'} — ETA ${formatTime(new Date(q.pickupAt))}`; queueList.appendChild(li); }) }
@@ -238,14 +329,85 @@
   btnReset.addEventListener('click', ()=>{ if(!confirm('Reset queue and tokens?')) return; state.queue=[]; state.nextToken=1; save(); })
 
   // inventory and sales
-  function renderInventory(){ inventoryList.innerHTML=''; sellItem.innerHTML=''; state.inventory.forEach(item=>{ const row = document.createElement('div'); row.style.display='flex'; row.style.justifyContent='space-between'; row.style.padding='6px 0'; row.innerHTML = `<div>${item.name}</div><div><strong>${item.stock}</strong></div>`; inventoryList.appendChild(row); const opt = document.createElement('option'); opt.value = item.id; opt.textContent = item.name; sellItem.appendChild(opt); }) }
+  function renderInventory(){ inventoryList.innerHTML=''; state.inventory.forEach(item=>{ const row = document.createElement('div'); row.style.display='flex'; row.style.justifyContent='space-between'; row.style.padding='6px 0'; const display = bagDisplayName(item); row.innerHTML = `<div>${display}</div><div><strong>${item.stock}</strong></div>`; inventoryList.appendChild(row); }) }
 
-  btnSell.addEventListener('click', ()=>{ const rc = (sellRC.value||'').trim(); const itemId = sellItem.value; const qty = Number(sellQty.value) || 0; if(!rc || !itemId || qty<=0){ alert('Please fill sale details'); return } const it = state.inventory.find(i=>i.id===itemId); if(!it){ alert('Invalid item'); return } if(it.stock < qty){ alert('Not enough stock'); return } it.stock -= qty; const sale = { id: state.sales.length+1, rc, itemId, qty, at: Date.now() }; state.sales.push(sale); save(); alert('Sale recorded'); })
+  
 
-  function renderSales(){ salesLog.innerHTML=''; state.sales.slice().reverse().forEach(s=>{ const it = state.inventory.find(i=>i.id===s.itemId) || {name:s.itemId}; const li = document.createElement('li'); li.textContent = `${new Date(s.at).toLocaleString()} — RC:${s.rc} — ${it.name} x ${s.qty}`; salesLog.appendChild(li); }) }
+  function renderSales(){
+    salesLog.innerHTML='';
+    state.sales.slice().reverse().forEach(s=>{
+      const li = document.createElement('li');
+      const header = document.createElement('div'); header.textContent = `${new Date(s.at).toLocaleString()} — RC:${s.rc}` + (s.customerName? ` — ${s.customerName}` : '');
+      li.appendChild(header);
+      const ul = document.createElement('ul'); ul.style.margin='6px 0 0 14px'; ul.style.padding='0';
+      (s.items||[]).forEach(itm=>{ const itemLi = document.createElement('li'); itemLi.textContent = `${itm.name} x ${itm.qty}`; ul.appendChild(itemLi); })
+      li.appendChild(ul);
+      salesLog.appendChild(li);
+    })
+  }
+
+  // Announcements
+  function renderAnnouncements(){
+    if(!announcementsList) return;
+    announcementsList.innerHTML = '';
+    state.announcements.slice().reverse().forEach(a=>{
+      const div = document.createElement('div'); div.className='announce'; div.style.padding='6px 0';
+      const h = document.createElement('div'); h.textContent = `[${new Date(a.at).toLocaleString()}] ${a.type.toUpperCase()}`;
+      const p = document.createElement('div'); p.textContent = a.text;
+      div.appendChild(h); div.appendChild(p);
+      announcementsList.appendChild(div);
+    })
+  }
+
+  btnPostAnnouncement && btnPostAnnouncement.addEventListener('click', ()=>{
+    if(!state.currentShop){ alert('Only logged-in shopkeepers can post announcements'); return }
+    const text = (announceText.value||'').trim(); const type = (announceType.value||'info');
+    if(!text){ alert('Enter announcement text'); return }
+    state.announcements.push({ text, type, shop: state.currentShop, at: Date.now() }); save(); announceText.value='';
+    alert('Announcement posted');
+  })
+
+  // Public render for announcements (a simple copy of admin list)
+  function renderPublicAnnouncements(){
+    const container = document.getElementById('announcements-list'); if(!container) return; container.innerHTML='';
+    state.announcements.slice().reverse().forEach(a=>{
+      const el = document.createElement('div'); el.className='announce-public'; el.style.padding='6px 0';
+      const head = document.createElement('div'); head.textContent = `${new Date(a.at).toLocaleString()} — ${a.type.toUpperCase()}`;
+      const body = document.createElement('div'); body.textContent = a.text;
+      el.appendChild(head); el.appendChild(body);
+      container.appendChild(el);
+    })
+  }
 
   // public dashboard
-  function renderPublic(){ stockStatus.innerHTML = '<h4>Stock Availability</h4>'; const list = document.createElement('div'); state.inventory.forEach(i=>{ const p = document.createElement('div'); p.textContent = `${i.name}: ${i.stock}`; list.appendChild(p); if(i.stock < 10){ const note = document.createElement('small'); note.style.color='crimson'; note.textContent = ' — Low stock — please restock soon'; list.appendChild(note); } }); stockStatus.appendChild(list);
+  function renderPublic(){
+    stockStatus.innerHTML = '<h4>Stock Availability</h4>';
+    const list = document.createElement('div');
+    let urgentItems = [];
+    state.inventory.forEach(i=>{
+      const p = document.createElement('div');
+      const display = bagDisplayName(i);
+      p.textContent = `${display}: ${i.stock}`;
+      list.appendChild(p);
+      const th = stockThresholds[i.id];
+      if(th){
+        if(i.stock <= th.urgent){
+          urgentItems.push({id:i.id, name:display, stock:i.stock});
+        } else if(i.stock <= th.low){
+          const note = document.createElement('small'); note.style.color='crimson'; note.textContent = ' — Low stock — please restock soon'; p.appendChild(note);
+        }
+      }
+    });
+    stockStatus.appendChild(list);
+    // If any urgent items exist, show a prominent banner
+    const existingBanner = document.getElementById('urgent-stock-banner');
+    if(existingBanner) existingBanner.remove();
+    if(urgentItems.length > 0){
+      const banner = document.createElement('div'); banner.id = 'urgent-stock-banner'; banner.style.background = '#ffdddd'; banner.style.padding = '10px'; banner.style.marginTop='8px'; banner.style.border = '1px solid #ffaaaa'; banner.style.color = '#a00';
+      const names = urgentItems.map(it=>`${it.name}: ${it.stock}`).join(' — ');
+      banner.textContent = `HURRY UP — stock will be completed soon: ${names}`;
+      stockStatus.appendChild(banner);
+    }
     // show pending tokens (public)
     upcomingTokens.innerHTML = '<h4>Pending Tokens</h4>';
     const up = document.createElement('div');
@@ -309,6 +471,9 @@
   })
 
   function renderAll(){ renderQueue(); renderInventory(); renderSales(); renderPublic(); renderStockTimestamp(); renderCustomerDashboard(); renderInventoryEdit(); }
+  // ensure announcements are rendered along with other UI pieces
+  const _origRenderAll = renderAll;
+  function renderAll(){ renderQueue(); renderInventory(); renderSales(); renderPublic(); renderStockTimestamp(); renderCustomerDashboard(); renderInventoryEdit(); renderAnnouncements(); renderPublicAnnouncements(); }
 
   // update auth control visibility based on current sessions
   function refreshAuthControls(){
