@@ -8,9 +8,9 @@
   // default data
   const defaultState = {
     inventory: [
-      {id:'rice', name:'Rice (80kg)', stock:100, uom:'pack'},
-      {id:'wheat', name:'Wheat (5kg)', stock:80, uom:'pack'},
-      {id:'sugar', name:'Sugar (1kg)', stock:50, uom:'pack'}
+      {id:'rice', name:'Rice (kg)', stock:100, uom:'pack'},
+      {id:'wheat', name:'Wheat (kg)', stock:80, uom:'pack'},
+      {id:'sugar', name:'Sugar (kg)', stock:50, uom:'pack'}
     ],
     queue: [],
     nextToken: 1,
