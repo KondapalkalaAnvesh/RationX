@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <title>Smart Ration Shop</title>
- <link rel="stylesheet" href="style.css">
+  <link rel="stylesheet" href="assets/style.css">
 </head>
 <body>
   <header>
@@ -165,13 +165,12 @@
           <label for="sell-rc">Ration Card</label>
           <input id="sell-rc" placeholder="Enter ration card of buyer" />
         </div>
-        <div class="form-row">
-          <label for="sell-item">Item</label>
-          <select id="sell-item"></select>
-        </div>
-        <div class="form-row">
-          <label for="sell-qty">Quantity</label>
-          <input id="sell-qty" type="number" min="1" value="1" />
+        <div class="info-box" id="sales-cart">
+          <h4>Items distributed</h4>
+          <div id="sales-items"></div>
+          <div class="form-row">
+            <button id="btn-add-sale-item">Add Item</button>
+          </div>
         </div>
         <div class="form-row">
           <button id="btn-sell">Record Sale</button>
@@ -179,6 +178,21 @@
 
         <h3>Sales Log</h3>
         <ul id="sales-log" class="list"></ul>
+        <h3>Announcements</h3>
+        <div class="info-box" id="announcements-admin">
+          <div class="form-row">
+            <label for="announce-text">New announcement</label>
+            <input id="announce-text" placeholder="e.g. Machine breakdown at 10:00 AM" />
+          </div>
+          <div class="form-row">
+            <select id="announce-type">
+              <option value="info">Info</option>
+              <option value="warning">Warning</option>
+              <option value="closed">Closed</option>
+            </select>
+            <button id="btn-post-announcement">Post Announcement</button>
+          </div>
+        </div>
       </div>
     </section>
 
@@ -186,6 +200,10 @@
       <h2>Public Dashboard</h2>
       <div id="stock-status" class="info-box"></div>
       <div id="upcoming-tokens" class="info-box"></div>
+      <div id="public-announcements" class="info-box">
+        <h4>Announcements</h4>
+        <div id="announcements-list"></div>
+      </div>
     </section>
   </main>
 
@@ -193,6 +211,6 @@
     <small>Built for a mini project — uses browser storage. For demo only.</small>
   </footer>
 
-  <script src="app.js"></script>
+  <script src="assets/app.js"></script>
 </body>
 </html>
