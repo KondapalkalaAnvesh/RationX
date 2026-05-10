@@ -26,7 +26,7 @@
   // helpers
   function formatToken(n){ return `T-${String(n).padStart(3,'0')}` }
   function nowPlusMinutes(min){ const d=new Date(); d.setMinutes(d.getMinutes()+min); return d }
-  function formatTime(d){ return d.toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'}) }
+  function formatTime(d){ return d.toLocaleString([], {month:'short', day:'numeric', hour:'2-digit', minute:'2-digit'}) }
 
   // map inventory items to display labels for public/admin stock views
   function bagDisplayName(item){
@@ -173,6 +173,26 @@
     if (custMembersInput) custMembersInput.value='';
   })
 
+  function getShopSchedule() {
+    const defaultSched = { open: '08:00', close: '20:00', lunchStart: '13:00', lunchEnd: '14:00' };
+    if (users.shops && users.shops.length > 0 && users.shops[0].schedule) {
+      const s = users.shops[0].schedule;
+      return {
+        open: s.open || defaultSched.open,
+        close: s.close || defaultSched.close,
+        lunchStart: s.lunchStart || defaultSched.lunchStart,
+        lunchEnd: s.lunchEnd || defaultSched.lunchEnd
+      };
+    }
+    return defaultSched;
+  }
+
+  function parseTime(timeStr) {
+    if (!timeStr) return 0;
+    const [h, m] = timeStr.split(':').map(Number);
+    return (h * 60) + (m || 0);
+  }
+
   function calculateNextTokenTime() {
     let baseTime = new Date();
     const uncalled = state.queue.filter(q=>!q.called);
@@ -183,49 +203,47 @@
       }
     }
     
-    // Add 5 minutes per person
-    let pickupAt = new Date(baseTime.getTime() + 5 * 60000);
+    // Add 10 minutes per person
+    let pickupAt = new Date(baseTime.getTime() + 10 * 60000);
     
-    let pMin = pickupAt.getHours() * 60 + pickupAt.getMinutes();
-    
-    const morningStart = 8 * 60;
-    const morningEnd = 11 * 60;
-    const eveningStart = 17 * 60;
-    const eveningEnd = 20 * 60;
-    
-    // If before 8 AM, move to 8 AM
-    if (pMin < morningStart) {
-      pickupAt.setHours(8, 0, 0, 0);
-    } 
-    // If between 11 AM and 5 PM, move to 5 PM
-    else if (pMin >= morningEnd && pMin < eveningStart) {
-      pickupAt.setHours(17, 0, 0, 0);
-    } 
-    // If after 8 PM, move to 8 AM next day
-    else if (pMin >= eveningEnd) {
-      pickupAt.setDate(pickupAt.getDate() + 1);
-      pickupAt.setHours(8, 0, 0, 0);
+    const sched = getShopSchedule();
+    const openMin = parseTime(sched.open);
+    const closeMin = parseTime(sched.close);
+    const lunchStartMin = parseTime(sched.lunchStart);
+    const lunchEndMin = parseTime(sched.lunchEnd);
+
+    while (true) {
+      let pMin = pickupAt.getHours() * 60 + pickupAt.getMinutes();
+      
+      if (pMin < openMin) {
+        pickupAt.setHours(Math.floor(openMin / 60), openMin % 60, 0, 0);
+        pMin = openMin;
+      }
+      
+      if (pMin >= lunchStartMin && pMin < lunchEndMin) {
+        pickupAt.setHours(Math.floor(lunchEndMin / 60), lunchEndMin % 60, 0, 0);
+        pMin = lunchEndMin;
+      }
+      
+      if (pMin >= closeMin) {
+        pickupAt.setDate(pickupAt.getDate() + 1);
+        pickupAt.setHours(Math.floor(openMin / 60), openMin % 60, 0, 0);
+        pMin = openMin;
+      }
+      
+      const dStr = pickupAt.toDateString();
+      const tokensOnThisDay = state.queue.filter(q => new Date(q.pickupAt).toDateString() === dStr).length;
+      
+      if (tokensOnThisDay >= 40) {
+        pickupAt.setDate(pickupAt.getDate() + 1);
+        pickupAt.setHours(Math.floor(openMin / 60), openMin % 60, 0, 0);
+        continue;
+      }
+      
+      break;
     }
     
     return pickupAt;
-  }
-
-  function isCurrentTimeInShopHours() {
-    const now = new Date();
-    const pMin = now.getHours() * 60 + now.getMinutes();
-    
-    // 8 AM to 11 AM
-    const morningStart = 8 * 60;
-    const morningEnd = 11 * 60;
-    
-    // 5 PM to 8 PM (17:00 to 20:00)
-    const eveningStart = 17 * 60;
-    const eveningEnd = 20 * 60;
-    
-    const isMorning = pMin >= morningStart && pMin <= morningEnd;
-    const isEvening = pMin >= eveningStart && pMin <= eveningEnd;
-    
-    return isMorning || isEvening;
   }
 
   // Customer login & token request
@@ -239,11 +257,6 @@
     // existing token check
     const existing = state.queue.find(q=>q.rc===rc && !q.called);
     if(existing){ showToken(existing); return }
-
-    if(!isCurrentTimeInShopHours()) {
-      alert('Tokens can only be requested between 8 AM to 11 AM and 5 PM to 8 PM.');
-      return;
-    }
 
     const token = state.nextToken++;
     const pickupAt = calculateNextTokenTime();
@@ -656,6 +669,13 @@
     if(state.currentCustomer){ if(custAuthControls) custAuthControls.querySelectorAll('button').forEach(b=>b.classList.add('hidden')); if(btnCustLogout) btnCustLogout.classList.remove('hidden'); }
     if(state.currentShop){ if(shopAuthControls) shopAuthControls.querySelectorAll('button').forEach(b=>b.classList.add('hidden')); if(btnShopLogout) btnShopLogout.classList.remove('hidden'); }
   }
+
+  // stock update: manual and hourly
+  btnUpdateStockNow && btnUpdateStockNow.addEventListener('click', ()=>{ if(!state.currentShop){ alert('Shopkeeper not logged in'); return } const shop = users.shops.find(s=>s.shopId===state.currentShop); if(!shop) return; shop.lastStockUpdate = Date.now(); saveUsers(); renderAll(); alert('Stock timestamp updated'); })
+
+  function ensureHourlyStockUpdater(){ if(window._stockInterval) clearInterval(window._stockInterval); window._stockInterval = setInterval(()=>{ if(!state.currentShop) return; const shop = users.shops.find(s=>s.shopId===state.currentShop); if(!shop) return; shop.lastStockUpdate = Date.now(); saveUsers(); renderAll(); }, 1000*60*60); }
+
+  function renderStockTimestamp(){ if(!stockLastUpdated) return; if(!state.currentShop){ stockLastUpdated.textContent='Shopkeeper not logged in'; return } const shop = users.shops.find(s=>s.shopId===state.currentShop); if(!shop){ stockLastUpdated.textContent='No shop data'; return } stockLastUpdated.textContent = `Last stock update: ${new Date(shop.lastStockUpdate).toLocaleString()}` }
 
   // call refresh once at startup
   refreshAuthControls();
